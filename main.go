@@ -14,9 +14,9 @@ import (
 )
 
 const thresh = 60
-const attempts = 3
-const clear = 600
-const sshPort = 22
+const attempts = 1
+const clear = 86400
+const tcpPort = 465
 
 var iplist = make([]string, attempts)
 var tmlist = make([]int64, attempts)
@@ -46,14 +46,14 @@ func compare() int {
 }
 
 func ipBlock(ip string, tm int64) {
-	cmd := fmt.Sprintf("iptables -I INPUT -s %s -p tcp --dport %d -j DROP", ip, sshPort)
+	cmd := fmt.Sprintf("iptables -I INPUT -s %s -p tcp --dport %d -j DROP", ip, tcpPort)
 	exec.Command("bash", "-c", cmd).Run()
 	log.Printf(cmd)
 	recordBlock(ip, tm)
 }
 
 func ipRemove(ip string) {
-	cmd := fmt.Sprintf("iptables -D INPUT -s %s -p tcp --dport %d -j DROP", ip, sshPort)
+	cmd := fmt.Sprintf("iptables -D INPUT -s %s -p tcp --dport %d -j DROP", ip, tcpPort)
 	exec.Command("bash", "-c", cmd).Run()
 	log.Printf(cmd)
 }
@@ -76,9 +76,12 @@ func checkBlocklist() {
 	}
 }
 
+
+
 func main() {
 
     reSASLFailedPassword := regexp.MustCompile(`SASL LOGIN authentication failed`)
+    reIP := regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`) // Regexp to extract IP
 
     go checkBlocklist()
 
@@ -90,9 +93,17 @@ func main() {
 
     // Process the captured output
     for line := range output {
-        fmt.Println(line)
         if reSASLFailedPassword.MatchString(line) {
-            ip := strings.Fields(line)[6]
+            fmt.Println(line)
+            ipField := strings.Fields(line)[6]
+            ipMatches := reIP.FindStringSubmatch(ipField)
+            if len(ipMatches) == 0 {
+                log.Println("No IP found in line:", line)
+                continue
+            }
+            ip := ipMatches[0] // This is the extracted IP address
+            fmt.Println(ip)
+
             tm := time.Now().Unix()
             recordIP(ip, tm)
 
@@ -106,5 +117,6 @@ func main() {
         }
     }
 }
+
 
 
